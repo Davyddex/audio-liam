@@ -70,7 +70,6 @@ class ServerStatus:
         self.lock = threading.Lock()
         self.active = False
         self.address = None
-        self.frames = 0
         self.missing_frames = 0
         self.rate_kib = 0.0
         self.audio = None
@@ -82,7 +81,6 @@ class ServerStatus:
         with self.lock:
             self.active = True
             self.address = address
-            self.frames = 0
             self.missing_frames = 0
             self.rate_kib = 0.0
             self.audio = None
@@ -108,14 +106,13 @@ class ServerStatus:
 
     def frame(self, payload, missing, rate_kib):
         with self.lock:
-            self.frames += 1
             self.missing_frames += missing
             self.rate_kib = rate_kib
             self.audio = np.frombuffer(payload, dtype=np.int16).copy()
 
     def snapshot(self):
         with self.lock:
-            return (self.active, self.address, self.frames, self.missing_frames,
+            return (self.active, self.address, self.missing_frames,
                     self.rate_kib, self.audio, self.refused, self.event, list(self.events))
 
 
@@ -220,7 +217,7 @@ def run(host, port, discovery_port, sink_name, description):
 
                 now = time.monotonic()
                 if now - last_draw >= 0.15:
-                    active, address, frames, missing, rate, audio, refused, event, events = status.snapshot()
+                    active, address, missing, rate, audio, refused, event, events = status.snapshot()
                     render(
                         "AudioLiam Receiver",
                         [
