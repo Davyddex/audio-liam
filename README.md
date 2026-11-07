@@ -32,7 +32,7 @@ On Windows, double-click `start_client.bat`, or run it from a terminal. With no 
 
 Use `--device` to select a microphone and `--port` to change the default TCP port (`54536`). Press Ctrl+C to stop. The Windows launcher pauses after the client exits so messages such as “receiver already has a sender” stay visible.
 
-The server accepts one sender at a time. Additional clients are immediately told that the receiver is busy and exit; the server stays running for the active sender. The terminal dashboard shows frames, detected missing audio frames, input level, and a small spectrum. Since the audio uses TCP, this reports missing application audio frames rather than raw network packet retransmissions.
+The server accepts one sender at a time. Additional clients are immediately told that the receiver is busy and exit; the server stays running for the active sender. The terminal dashboards keep a short event history and show frame counts, detected missing audio frames, input level, and a vertically stacked spectrum with fading block characters. Since the audio uses TCP, this reports missing application audio frames rather than raw network packet retransmissions.
 
 Local discovery uses UDP port `54537`; audio uses TCP port `54536`. Allow both on the receiver's local network firewall. Discovery is local-network only and does not cross VPNs; when connecting remotely, pass the receiver's VPN address directly, for example `python client.py 10.8.0.1`.
 

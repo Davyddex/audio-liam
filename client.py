@@ -48,6 +48,8 @@ def run(host, port, device=None, noise_gate=True, discovery_port=DISCOVERY_PORT)
         connection.sendall(HELLO)
         response = recv_exact(connection, len(READY))
         if response == BUSY:
+            events = [f"Connecting to {host}:{port}", "Connection refused: receiver already has a sender"]
+            render("AudioLiam Sender", ["No microphone stream started."], events=events)
             print("This receiver already has a sender. Disconnect that sender before retrying.")
             return
         if response != READY:
@@ -55,42 +57,55 @@ def run(host, port, device=None, noise_gate=True, discovery_port=DISCOVERY_PORT)
 
         connection.settimeout(None)
         print("Connected. Opening microphone...", flush=True)
-        with open_microphone(SAMPLE_RATE, CHANNELS, BLOCK_SIZE, device) as stream:
-            gate = NoiseGate() if noise_gate else None
-            sequence = 0
-            frames_sent = 0
-            input_overflows = 0
-            total_bytes = 0
-            started = time.monotonic()
-            last_draw = 0.0
-            last_audio = None
-            while True:
-                audio, overflowed = stream.read(BLOCK_SIZE)
-                if overflowed:
-                    input_overflows += 1
-                if gate is not None:
-                    audio = gate.process(audio)
-                payload = np.asarray(audio, dtype=np.int16).tobytes()
-                connection.sendall(encode_frame(payload, sequence))
-                sequence = (sequence + 1) & 0xFFFFFFFF
-                frames_sent += 1
-                total_bytes += len(payload)
-                last_audio = audio
+        events = [f"Connection started to {host}:{port}"]
+        gate = NoiseGate() if noise_gate else None
+        sequence = 0
+        frames_sent = 0
+        input_overflows = 0
+        total_bytes = 0
+        started = time.monotonic()
+        last_draw = 0.0
+        last_audio = None
+        try:
+            with open_microphone(SAMPLE_RATE, CHANNELS, BLOCK_SIZE, device) as stream:
+                events.append("Microphone capture started")
+                while True:
+                    audio, overflowed = stream.read(BLOCK_SIZE)
+                    if overflowed:
+                        input_overflows += 1
+                    if gate is not None:
+                        audio = gate.process(audio)
+                    payload = np.asarray(audio, dtype=np.int16).tobytes()
+                    connection.sendall(encode_frame(payload, sequence))
+                    sequence = (sequence + 1) & 0xFFFFFFFF
+                    frames_sent += 1
+                    total_bytes += len(payload)
+                    last_audio = audio
 
-                now = time.monotonic()
-                if now - last_draw >= 0.15:
-                    elapsed = max(now - started, 0.001)
-                    render(
-                        "AudioLiam Sender",
-                        [
-                            f"Receiver: {host}:{port}",
-                            f"Frames sent: {frames_sent:,}    Input overflows: {input_overflows}",
-                            f"Rate: {total_bytes / elapsed / 1024:,.1f} KiB/s    Gate: {'on' if gate else 'off'}",
-                        ],
-                        last_audio,
-                        SAMPLE_RATE,
-                    )
-                    last_draw = now
+                    now = time.monotonic()
+                    if now - last_draw >= 0.15:
+                        elapsed = max(now - started, 0.001)
+                        render(
+                            "AudioLiam Sender",
+                            [
+                                f"Receiver: {host}:{port}",
+                                f"Frames sent: {frames_sent:,}    Input overflows: {input_overflows}",
+                                f"Rate: {total_bytes / elapsed / 1024:,.1f} KiB/s    Gate: {'on' if gate else 'off'}",
+                            ],
+                            last_audio,
+                            SAMPLE_RATE,
+                            events,
+                        )
+                        last_draw = now
+        finally:
+            events.append("Connection closed")
+            render(
+                "AudioLiam Sender",
+                [f"Receiver: {host}:{port}", f"Frames sent: {frames_sent:,}"],
+                last_audio,
+                SAMPLE_RATE,
+                events,
+            )
 
 
 def main():

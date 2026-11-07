@@ -1,5 +1,6 @@
 """Receive one microphone stream and publish it as a PipeWire virtual source."""
 import argparse
+from collections import deque
 import shutil
 import socket
 import subprocess
@@ -76,6 +77,7 @@ class ServerStatus:
         self.audio = None
         self.refused = 0
         self.event = "Waiting for a sender"
+        self.events = deque(["Server started; waiting for a sender"], maxlen=4)
 
     def start(self, address):
         with self.lock:
@@ -86,17 +88,24 @@ class ServerStatus:
             self.rate_kib = 0.0
             self.audio = None
             self.event = f"Connected: {address[0]}"
+            self.events.append(f"Connection started from {address[0]}")
 
     def end(self, event):
         with self.lock:
             self.active = False
             self.address = None
             self.event = event
+            self.events.append(event)
 
     def refuse(self, address):
         with self.lock:
             self.refused += 1
             self.event = f"Rejected extra sender: {address[0]} (already in use)"
+            self.events.append(f"Connection refused from {address[0]} (already connected)")
+
+    def incoming(self, address):
+        with self.lock:
+            self.events.append(f"Incoming connection from {address[0]}")
 
     def frame(self, payload, missing, rate_kib):
         with self.lock:
@@ -108,7 +117,7 @@ class ServerStatus:
     def snapshot(self):
         with self.lock:
             return (self.active, self.address, self.frames, self.missing_frames,
-                    self.rate_kib, self.audio, self.refused, self.event)
+                    self.rate_kib, self.audio, self.refused, self.event, list(self.events))
 
 
 def serve_client(connection, address, sink_name, status):
@@ -175,6 +184,7 @@ def run(host, port, discovery_port, sink_name, description):
                 except socket.timeout:
                     connection = None
                 if connection is not None:
+                    status.incoming(address)
                     with status.lock:
                         already_active = status.active
                         if not already_active:
@@ -195,6 +205,7 @@ def run(host, port, discovery_port, sink_name, description):
                                 status.end("Rejected client with incompatible protocol")
                                 connection.close()
                             else:
+                                status.start(address)
                                 connection.sendall(READY)
                                 connection.settimeout(None)
                                 worker = threading.Thread(
@@ -209,7 +220,7 @@ def run(host, port, discovery_port, sink_name, description):
 
                 now = time.monotonic()
                 if now - last_draw >= 0.15:
-                    active, address, frames, missing, rate, audio, refused, event = status.snapshot()
+                    active, address, frames, missing, rate, audio, refused, event, events = status.snapshot()
                     render(
                         "AudioLiam Receiver",
                         [
@@ -221,6 +232,7 @@ def run(host, port, discovery_port, sink_name, description):
                         ],
                         audio,
                         SAMPLE_RATE,
+                        events,
                     )
                     last_draw = now
 
