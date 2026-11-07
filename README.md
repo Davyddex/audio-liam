@@ -30,4 +30,4 @@ python client.py RECEIVER_IP
 
 Use `--device` to select an input device and `--port` to change the default TCP port (`54536`). Press Ctrl+C to stop either process.
 
-The stream uses mono 48 kHz signed 16-bit PCM in 20 ms frames. Ensure the receiver port is reachable through the network firewall. This initial implementation sends unencrypted audio and should only be used on a trusted network.
+The stream uses mono 48 kHz signed 16-bit PCM in 10 ms frames, with a 30 ms requested playback latency. A gentle noise gate reduces quiet background noise between speech; use `--no-noise-gate` on the sender to disable it. The gate does not remove steady noise while speaking. Ensure the receiver port is reachable through the network firewall. This initial implementation sends unencrypted audio and should only be used on a trusted network.

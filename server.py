@@ -58,11 +58,12 @@ def serve_client(connection, address, sink_name):
         raise RuntimeError("pacat not found; install PipeWire's PulseAudio compatibility tools")
     player = subprocess.Popen(
         [pacat, "--playback", f"--device={sink_name}", "--raw", "--format=s16le",
-         f"--rate={SAMPLE_RATE}", f"--channels={CHANNELS}"],
+         f"--rate={SAMPLE_RATE}", f"--channels={CHANNELS}", "--latency-msec=30"],
         stdin=subprocess.PIPE,
     )
     try:
         with connection:
+            connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             while True:
                 payload = recv_frame(connection)
                 if payload is None:
