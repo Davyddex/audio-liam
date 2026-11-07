@@ -1,14 +1,9 @@
+"""Shared AudioLiam settings."""
+import os
 
-# ================================ Info Server ==============================
-
-PORT = 54536
-ENCODING = "utf-8"
-STOP = "STOP"
-BIT_HEADER_SIZE = 20
-
-# ================================ Audio ==============================
-
-SINK_NAME = "audioliam-virtual-mic-sink"
-SINK_DESCRIPTION = "AudioLiam Virtual Microphone"
-SAMPLE_RATE = 48000
-BLOCK_SIZE = 1024
+PORT = int(os.getenv("AUDIOLIAM_PORT", "54536"))
+SAMPLE_RATE = int(os.getenv("AUDIOLIAM_SAMPLE_RATE", "48000"))
+CHANNELS = 1
+BLOCK_SIZE = int(os.getenv("AUDIOLIAM_BLOCK_SIZE", "960"))  # 20 ms at 48 kHz
+SINK_NAME = os.getenv("AUDIOLIAM_SINK_NAME", "audioliam_virtual_mic")
+SINK_DESCRIPTION = os.getenv("AUDIOLIAM_SINK_DESCRIPTION", "AudioLiam Virtual Microphone")

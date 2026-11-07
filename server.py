@@ -1,67 +1,98 @@
-import numpy as np
-import sounddevice as sd
-
+"""Receive microphone audio and expose it as a PipeWire virtual source."""
+import argparse
+import shutil
 import socket
-import threading
-import time
-import struct
+import subprocess
+import sys
 
-from config import PORT, ENCODING, STOP, BIT_HEADER_SIZE
-
-server_ip = socket.gethostbyname(socket.gethostname())
+from audioliam.protocol import recv_frame
+from config import BLOCK_SIZE, CHANNELS, PORT, SAMPLE_RATE, SINK_DESCRIPTION, SINK_NAME
 
 
+class VirtualMicrophone:
+    """PipeWire/PulseAudio null sink; its monitor is the selectable mic source."""
+    def __init__(self, sink_name, description):
+        self.sink_name = sink_name
+        self.module_id = None
+        self.description = description
 
-server_address = (server_ip, PORT)
-print(server_address)
-client_connected = []  # Storing the client address of the client connected
+    def __enter__(self):
+        pactl = shutil.which("pactl")
+        if pactl is None:
+            raise RuntimeError("pactl not found; install PipeWire's PulseAudio compatibility tools")
+        result = subprocess.run(
+            [pactl, "load-module", "module-null-sink", f"sink_name={self.sink_name}",
+             f"sink_properties=device.description={self.description}"],
+            check=True, capture_output=True, text=True,
+        )
+        self.module_id = result.stdout.strip()
+        print(f"Virtual microphone ready: {self.sink_name}.monitor")
+        print("Select that monitor source as the microphone in your application.")
+        return self
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(server_address)
-
-def send_to_list(list_of_user, data):
-    """list_of_user = list of client_information
-     data = data to send to the list"""
-
-    # send  data to a list of client
-    for other_client in list_of_user:
-        try:
-            # send of the information
-            other_client.send(data)
-        except:
-            pass
-
-
-def clientf(client, address):
-
-    client_connected.append(client)
-
-    while True:
-        Header = client.recv(BIT_HEADER_SIZE).decode(ENCODING)
-        if Header:
-            print(Header)
-            client.close()
-            client_connected.remove(client)
-            exit()
-        time.sleep(1)
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.module_id is not None:
+            pactl = shutil.which("pactl")
+            if pactl:
+                subprocess.run([pactl, "unload-module", self.module_id], check=False)
 
 
-def start(Verbose=True):
-    server.listen()
-    if Verbose:
-        print(f"[SERVER] : Server online.")
-        print(f"[SERVER] : Connected port : {PORT}")
-        print(f"[SERVER] : IP Address  : {server_ip}")
-    up = False
-    while not up:
-        client, address = server.accept()
-        thread_client = threading.Thread(target=clientf, args=(client, address))
-        thread_client.start()
-        time.sleep(1)
-        up = thread_client.is_alive()
-        if Verbose:
-            print(f"[SERVER] : Active Connection : {address}")
+def serve_client(connection, address, sink_name):
+    print(f"Sender connected: {address}")
+    pacat = shutil.which("pacat")
+    if pacat is None:
+        raise RuntimeError("pacat not found; install PipeWire's PulseAudio compatibility tools")
+    player = subprocess.Popen(
+        [pacat, "--playback", f"--device={sink_name}", "--raw", "--format=s16le",
+         f"--rate={SAMPLE_RATE}", f"--channels={CHANNELS}"],
+        stdin=subprocess.PIPE,
+    )
+    try:
+        with connection:
+            while True:
+                payload = recv_frame(connection)
+                if payload is None:
+                    break
+                if len(payload) % (2 * CHANNELS):
+                    raise ValueError("received audio frame has an invalid channel count")
+                player.stdin.write(payload)
+                player.stdin.flush()
+    finally:
+        player.stdin.close()
+        if player.wait() not in (0,):
+            raise RuntimeError("pacat playback process exited with an error")
+    print(f"Sender disconnected: {address}")
 
 
-start()
+def run(host, port, sink_name, description):
+    with VirtualMicrophone(sink_name, description):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind((host, port))
+            listener.listen(1)
+            print(f"Listening on {host}:{port}; waiting for a sender...")
+            while True:
+                connection, address = listener.accept()
+                try:
+                    serve_client(connection, address, sink_name)
+                except (OSError, ValueError, RuntimeError) as exc:
+                    print(f"Audio stream ended: {exc}", file=sys.stderr)
 
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", default="0.0.0.0", help="interface to listen on (default: all)")
+    parser.add_argument("--port", type=int, default=PORT)
+    parser.add_argument("--sink-name", default=SINK_NAME)
+    parser.add_argument("--sink-description", default=SINK_DESCRIPTION)
+    args = parser.parse_args()
+    try:
+        run(args.host, args.port, args.sink_name, args.sink_description)
+    except KeyboardInterrupt:
+        print("\nStopped.")
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+        parser.exit(1, f"AudioLiam receiver error: {exc}\n")
+
+
+if __name__ == "__main__":
+    main()

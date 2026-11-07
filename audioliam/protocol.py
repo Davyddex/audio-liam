@@ -1,19 +1,31 @@
-import numpy as np
-import sounddevice as sd
-import opuslib as ol
-import socket
-import threading
-import time
+"""Length-prefixed PCM audio frames sent over a TCP stream."""
 import struct
 
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+_HEADER = struct.Struct("!I")
+MAX_FRAME_BYTES = 1024 * 1024
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+def encode_frame(payload: bytes) -> bytes:
+    if len(payload) > MAX_FRAME_BYTES:
+        raise ValueError("audio frame is too large")
+    return _HEADER.pack(len(payload)) + payload
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+
+def recv_exact(sock, size: int):
+    chunks = bytearray()
+    while len(chunks) < size:
+        chunk = sock.recv(size - len(chunks))
+        if not chunk:
+            return None
+        chunks.extend(chunk)
+    return bytes(chunks)
+
+
+def recv_frame(sock):
+    header = recv_exact(sock, _HEADER.size)
+    if header is None:
+        return None
+    (size,) = _HEADER.unpack(header)
+    if size > MAX_FRAME_BYTES:
+        raise ValueError("peer sent an oversized audio frame")
+    return recv_exact(sock, size)
