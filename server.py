@@ -6,14 +6,15 @@ import subprocess
 import sys
 
 from audioliam.protocol import recv_frame
-from config import BLOCK_SIZE, CHANNELS, PORT, SAMPLE_RATE, SINK_DESCRIPTION, SINK_NAME
+from config import CHANNELS, PORT, SAMPLE_RATE, SINK_DESCRIPTION, SINK_NAME, SOURCE_NAME
 
 
 class VirtualMicrophone:
-    """PipeWire/PulseAudio null sink; its monitor is the selectable mic source."""
+    """Playback sink feeding a separately named remapped microphone source."""
     def __init__(self, sink_name, description):
         self.sink_name = sink_name
-        self.module_id = None
+        self.sink_module_id = None
+        self.source_module_id = None
         self.description = description
 
     def __enter__(self):
@@ -22,19 +23,32 @@ class VirtualMicrophone:
             raise RuntimeError("pactl not found; install PipeWire's PulseAudio compatibility tools")
         result = subprocess.run(
             [pactl, "load-module", "module-null-sink", f"sink_name={self.sink_name}",
-             f"sink_properties=device.description={self.description}"],
+             f"sink_properties=device.description={self.description} Output"],
             check=True, capture_output=True, text=True,
         )
-        self.module_id = result.stdout.strip()
-        print(f"Virtual microphone ready: {self.sink_name}.monitor")
-        print("Select that monitor source as the microphone in your application.")
+        self.sink_module_id = result.stdout.strip()
+        try:
+            source = subprocess.run(
+                [pactl, "load-module", "module-remap-source",
+                 f"master={self.sink_name}.monitor", f"source_name={SOURCE_NAME}",
+                 f"source_properties=device.description={self.description}"],
+                check=True, capture_output=True, text=True,
+            )
+            self.source_module_id = source.stdout.strip()
+        except Exception:
+            subprocess.run([pactl, "unload-module", self.sink_module_id], check=False)
+            self.sink_module_id = None
+            raise
+        print(f"Virtual microphone input ready: {SOURCE_NAME}")
+        print(f"Select '{self.description}' as the microphone input in your application.")
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.module_id is not None:
-            pactl = shutil.which("pactl")
-            if pactl:
-                subprocess.run([pactl, "unload-module", self.module_id], check=False)
+        pactl = shutil.which("pactl")
+        if pactl:
+            for module_id in (self.source_module_id, self.sink_module_id):
+                if module_id is not None:
+                    subprocess.run([pactl, "unload-module", module_id], check=False)
 
 
 def serve_client(connection, address, sink_name):

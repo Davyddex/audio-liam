@@ -18,7 +18,7 @@ The receiver also needs PipeWire with `pipewire-pulse` and the `pactl` and `paca
 python server.py
 ```
 
-The receiver creates a temporary null sink named `audioliam_virtual_mic`. Applications can select its monitor source, `audioliam_virtual_mic.monitor`, as their microphone. The sink is removed when the receiver exits. Use `--sink-name` to choose another name.
+The receiver creates a temporary playback sink plus a separate remapped PipeWire source named `audioliam_microphone`. Select **AudioLiam Virtual Microphone** as the microphone input in your application. Both virtual devices are removed when the receiver exits.
 
 ## Start the sender
 
