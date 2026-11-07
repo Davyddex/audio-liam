@@ -7,4 +7,5 @@
 .idea/other.xml
 .idea/vcs.xml
 .idea/inspectionProfiles/profiles_settings.xml
-__pycache__/config.cpython-38.pyc
+__pycache__/
+*.py[cod]
