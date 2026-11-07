@@ -11,10 +11,13 @@ from config import BLOCK_SIZE, CHANNELS, PORT, SAMPLE_RATE
 
 
 def run(host, port, device=None):
-    with socket.create_connection((host, port)) as connection:
-        print(f"Connected to {host}:{port}. Sending microphone audio; press Ctrl+C to stop.")
+    print(f"Connecting to receiver {host}:{port}...", flush=True)
+    with socket.create_connection((host, port), timeout=5) as connection:
+        connection.settimeout(None)
+        print("Connected. Opening microphone...", flush=True)
         try:
             with open_microphone(SAMPLE_RATE, CHANNELS, BLOCK_SIZE, device) as stream:
+                print("Microphone ready; sending audio. Press Ctrl+C to stop.", flush=True)
                 while True:
                     audio, overflowed = stream.read(BLOCK_SIZE)
                     if overflowed:
