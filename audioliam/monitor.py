@@ -61,8 +61,8 @@ class SpectrumHold:
                     cells.append(partial[max(1, min(7, fraction))])
                 else:
                     cells.append("┄" if row in (3, 6, 9, 12) else " ")
-            output.append(f"{row:02d} ┤" + " ".join(cells))
-        output.append("00 └" + "┴ " * self.band_count)
+            output.append(" ".join(cells))
+        output.append("─" * (self.band_count * 2 - 1))
         return output
 
 
@@ -76,9 +76,8 @@ def make_event(message):
 
 def _format_event(event):
     if isinstance(event, tuple) and len(event) == 3:
-        timestamp, created, message = event
-        age = max(0.0, time.monotonic() - created)
-        return f"> {timestamp}  {age:5.1f}s ago  {message}"
+        timestamp, _created, message = event
+        return f"> {timestamp}  {message}"
     return f"> {datetime.now().strftime('%H:%M:%S')}  {event}"
 
 

@@ -226,7 +226,7 @@ def run(host, port, discovery_port, sink_name, description):
                         [
                             f"Listening: {host}:{port}    Discovery UDP: {discovery_port}",
                             f"State: {'CONNECTED' if active else 'waiting'}    Sender: {address[0] if address else '-'}",
-                            f"Frames received: {frames:,}    Missing audio frames: {missing}",
+                            f"Missing audio frames: {missing}",
                             f"Rate: {rate:,.1f} KiB/s    Rejected extra senders: {refused}",
                             f"Status: {event}",
                         ],
