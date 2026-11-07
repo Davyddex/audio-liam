@@ -116,7 +116,7 @@ class ServerStatus:
                     self.rate_kib, self.audio, self.refused, self.event, list(self.events))
 
 
-def serve_client(connection, address, sink_name, status, monitor=True):
+def serve_client(connection, address, sink_name, status, monitor=False):
     pacat = shutil.which("pacat")
     if pacat is None:
         status.end("pacat not found")
@@ -165,7 +165,7 @@ def serve_client(connection, address, sink_name, status, monitor=True):
             print(f"Connection closed: {address[0]}")
 
 
-def run(host, port, discovery_port, sink_name, description, monitor=True):
+def run(host, port, discovery_port, sink_name, description, monitor=False):
     discovery_port = discovery_port or port
     status = ServerStatus()
     with VirtualMicrophone(sink_name, description):
@@ -255,11 +255,11 @@ def main():
     parser.add_argument("--discovery-port", type=int, help="UDP discovery port (defaults to --port)")
     parser.add_argument("--sink-name", default=SINK_NAME)
     parser.add_argument("--sink-description", default=SINK_DESCRIPTION)
-    parser.add_argument("--no-monitor", action="store_true", help="disable the live terminal dashboard")
+    parser.add_argument("--monitor", action="store_true", help="enable the live terminal dashboard")
     args = parser.parse_args()
     try:
         run(args.host, args.port, args.discovery_port, args.sink_name, args.sink_description,
-            monitor=not args.no_monitor)
+            monitor=args.monitor)
     except KeyboardInterrupt:
         print("\nStopped.")
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:

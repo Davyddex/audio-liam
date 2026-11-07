@@ -32,7 +32,7 @@ On Windows, double-click `start_client.bat`, or run it from a terminal. With no 
 
 Use `--device` to select a microphone and `--port` to change the default TCP port (`54536`). Press Ctrl+C to stop. The Windows launcher pauses after the client exits so messages such as “receiver already has a sender” stay visible.
 
-Pass `--no-monitor` to either launcher to disable the live dashboard while keeping connection messages. For example: `bash start_server.sh --no-monitor`, `bash start_client.sh --no-monitor`, or `start_client.bat --no-monitor`.
+The server runs without the live dashboard by default and prints connection events as they happen. Pass `--monitor` to `start_server.sh` to enable the dashboard. The client dashboard is on by default; pass `--no-monitor` to `bash start_client.sh` or `start_client.bat` to disable it.
 
 The server accepts one sender at a time. Additional clients are immediately told that the receiver is busy and exit; the server stays running for the active sender. The terminal dashboards keep a short event history and show detected missing audio frames, input level, rate, and a vertically stacked spectrum with fading block characters. Since the audio uses TCP, this reports missing application audio frames rather than raw network packet retransmissions.
 
