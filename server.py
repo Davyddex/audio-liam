@@ -11,11 +11,10 @@ import time
 import numpy as np
 
 from audioliam.discovery import serve_discovery
-from audioliam.monitor import render
+from audioliam.monitor import make_event, render
 from audioliam.protocol import BUSY, HELLO, READY, recv_exact, recv_frame
 from config import (
     CHANNELS,
-    DISCOVERY_PORT,
     PORT,
     SAMPLE_RATE,
     SINK_DESCRIPTION,
@@ -77,7 +76,7 @@ class ServerStatus:
         self.audio = None
         self.refused = 0
         self.event = "Waiting for a sender"
-        self.events = deque(["Server started; waiting for a sender"], maxlen=4)
+        self.events = deque([make_event("Server started; waiting for a sender")], maxlen=4)
 
     def start(self, address):
         with self.lock:
@@ -88,24 +87,24 @@ class ServerStatus:
             self.rate_kib = 0.0
             self.audio = None
             self.event = f"Connected: {address[0]}"
-            self.events.append(f"Connection started from {address[0]}")
+            self.events.append(make_event(f"Connection started from {address[0]}"))
 
     def end(self, event):
         with self.lock:
             self.active = False
             self.address = None
             self.event = event
-            self.events.append(event)
+            self.events.append(make_event(event))
 
     def refuse(self, address):
         with self.lock:
             self.refused += 1
             self.event = f"Rejected extra sender: {address[0]} (already in use)"
-            self.events.append(f"Connection refused from {address[0]} (already connected)")
+            self.events.append(make_event(f"Connection refused from {address[0]} (already connected)"))
 
     def incoming(self, address):
         with self.lock:
-            self.events.append(f"Incoming connection from {address[0]}")
+            self.events.append(make_event(f"Incoming connection from {address[0]}"))
 
     def frame(self, payload, missing, rate_kib):
         with self.lock:
@@ -164,6 +163,7 @@ def serve_client(connection, address, sink_name, status):
 
 
 def run(host, port, discovery_port, sink_name, description):
+    discovery_port = discovery_port or port
     status = ServerStatus()
     with VirtualMicrophone(sink_name, description):
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -241,7 +241,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="0.0.0.0", help="interface to listen on (default: all)")
     parser.add_argument("--port", type=int, default=PORT)
-    parser.add_argument("--discovery-port", type=int, default=DISCOVERY_PORT)
+    parser.add_argument("--discovery-port", type=int, help="UDP discovery port (defaults to --port)")
     parser.add_argument("--sink-name", default=SINK_NAME)
     parser.add_argument("--sink-description", default=SINK_DESCRIPTION)
     args = parser.parse_args()

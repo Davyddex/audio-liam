@@ -8,10 +8,10 @@ import numpy as np
 
 from audioliam.capture import open_microphone
 from audioliam.discovery import find_receivers
-from audioliam.monitor import render
+from audioliam.monitor import make_event, render
 from audioliam.noisegate import NoiseGate
 from audioliam.protocol import BUSY, HELLO, READY, encode_frame, recv_exact
-from config import BLOCK_SIZE, CHANNELS, DISCOVERY_PORT, PORT, SAMPLE_RATE
+from config import BLOCK_SIZE, CHANNELS, PORT, SAMPLE_RATE
 
 
 def choose_receiver(port, discovery_port):
@@ -34,12 +34,16 @@ def choose_receiver(port, discovery_port):
             if answer:
                 return answer, port
             continue
-        answer = input("No receiver found. Enter its IP address (or press Enter to retry): ").strip()
+        answer = input(
+            "No receiver found. Check UDP discovery on the receiver's firewall; "
+            "enter its IP address or press Enter to retry: "
+        ).strip()
         if answer:
             return answer, port
 
 
-def run(host, port, device=None, noise_gate=True, discovery_port=DISCOVERY_PORT):
+def run(host, port, device=None, noise_gate=True, discovery_port=None):
+    discovery_port = discovery_port or port
     if not host:
         host, port = choose_receiver(port, discovery_port)
     print(f"Connecting to receiver {host}:{port}...", flush=True)
@@ -48,7 +52,8 @@ def run(host, port, device=None, noise_gate=True, discovery_port=DISCOVERY_PORT)
         connection.sendall(HELLO)
         response = recv_exact(connection, len(READY))
         if response == BUSY:
-            events = [f"Connecting to {host}:{port}", "Connection refused: receiver already has a sender"]
+            events = [make_event(f"Connecting to {host}:{port}"),
+                      make_event("Connection refused: receiver already has a sender")]
             render("AudioLiam Sender", ["No microphone stream started."], events=events)
             print("This receiver already has a sender. Disconnect that sender before retrying.")
             return
@@ -57,7 +62,7 @@ def run(host, port, device=None, noise_gate=True, discovery_port=DISCOVERY_PORT)
 
         connection.settimeout(None)
         print("Connected. Opening microphone...", flush=True)
-        events = [f"Connection started to {host}:{port}"]
+        events = [make_event(f"Connection started to {host}:{port}")]
         gate = NoiseGate() if noise_gate else None
         sequence = 0
         frames_sent = 0
@@ -68,7 +73,7 @@ def run(host, port, device=None, noise_gate=True, discovery_port=DISCOVERY_PORT)
         last_audio = None
         try:
             with open_microphone(SAMPLE_RATE, CHANNELS, BLOCK_SIZE, device) as stream:
-                events.append("Microphone capture started")
+                events.append(make_event("Microphone capture started"))
                 while True:
                     audio, overflowed = stream.read(BLOCK_SIZE)
                     if overflowed:
@@ -98,7 +103,7 @@ def run(host, port, device=None, noise_gate=True, discovery_port=DISCOVERY_PORT)
                         )
                         last_draw = now
         finally:
-            events.append("Connection closed")
+            events.append(make_event("Connection closed"))
             render(
                 "AudioLiam Sender",
                 [f"Receiver: {host}:{port}", f"Frames sent: {frames_sent:,}"],
@@ -112,7 +117,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("host", nargs="?", help="receiver IP; omit to search the local network")
     parser.add_argument("--port", type=int, default=PORT)
-    parser.add_argument("--discovery-port", type=int, default=DISCOVERY_PORT)
+    parser.add_argument("--discovery-port", type=int, help="UDP discovery port (defaults to --port)")
     parser.add_argument("--device", help="sounddevice input device name or index")
     parser.add_argument("--no-noise-gate", action="store_true", help="disable the gentle background noise gate")
     args = parser.parse_args()
