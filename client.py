@@ -65,7 +65,6 @@ def run(host, port, device=None, noise_gate=True, discovery_port=None):
         events = [make_event(f"Connection started to {host}:{port}")]
         gate = NoiseGate() if noise_gate else None
         sequence = 0
-        frames_sent = 0
         input_overflows = 0
         total_bytes = 0
         started = time.monotonic()
@@ -83,7 +82,6 @@ def run(host, port, device=None, noise_gate=True, discovery_port=None):
                     payload = np.asarray(audio, dtype=np.int16).tobytes()
                     connection.sendall(encode_frame(payload, sequence))
                     sequence = (sequence + 1) & 0xFFFFFFFF
-                    frames_sent += 1
                     total_bytes += len(payload)
                     last_audio = audio
 
@@ -94,7 +92,7 @@ def run(host, port, device=None, noise_gate=True, discovery_port=None):
                             "AudioLiam Sender",
                             [
                                 f"Receiver: {host}:{port}",
-                                f"Frames sent: {frames_sent:,}    Input overflows: {input_overflows}",
+                                f"Input overflows: {input_overflows}",
                                 f"Rate: {total_bytes / elapsed / 1024:,.1f} KiB/s    Gate: {'on' if gate else 'off'}",
                             ],
                             last_audio,
@@ -106,7 +104,7 @@ def run(host, port, device=None, noise_gate=True, discovery_port=None):
             events.append(make_event("Connection closed"))
             render(
                 "AudioLiam Sender",
-                [f"Receiver: {host}:{port}", f"Frames sent: {frames_sent:,}"],
+                [f"Receiver: {host}:{port}", "Connection closed."],
                 last_audio,
                 SAMPLE_RATE,
                 events,

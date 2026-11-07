@@ -61,8 +61,8 @@ class SpectrumHold:
                     cells.append(partial[max(1, min(7, fraction))])
                 else:
                     cells.append("┄" if row in (3, 6, 9, 12) else " ")
-            output.append(" ".join(cells))
-        output.append("─" * (self.band_count * 2 - 1))
+            output.append("  ┤" + " ".join(cells))
+        output.append("  └" + "┴ " * self.band_count)
         return output
 
 
