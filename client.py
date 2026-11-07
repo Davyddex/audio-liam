@@ -42,7 +42,7 @@ def choose_receiver(port, discovery_port):
             return answer, port
 
 
-def run(host, port, device=None, noise_gate=True, discovery_port=None):
+def run(host, port, device=None, noise_gate=True, discovery_port=None, monitor=True):
     discovery_port = discovery_port or port
     if not host:
         host, port = choose_receiver(port, discovery_port)
@@ -54,7 +54,8 @@ def run(host, port, device=None, noise_gate=True, discovery_port=None):
         if response == BUSY:
             events = [make_event(f"Connecting to {host}:{port}"),
                       make_event("Connection refused: receiver already has a sender")]
-            render("AudioLiam Sender", ["No microphone stream started."], events=events)
+            if monitor:
+                render("AudioLiam Sender", ["No microphone stream started."], events=events)
             print("This receiver already has a sender. Disconnect that sender before retrying.")
             return
         if response != READY:
@@ -73,6 +74,8 @@ def run(host, port, device=None, noise_gate=True, discovery_port=None):
         try:
             with open_microphone(SAMPLE_RATE, CHANNELS, BLOCK_SIZE, device) as stream:
                 events.append(make_event("Microphone capture started"))
+                if not monitor:
+                    print("Microphone capture started; sending audio.")
                 while True:
                     audio, overflowed = stream.read(BLOCK_SIZE)
                     if overflowed:
@@ -86,7 +89,7 @@ def run(host, port, device=None, noise_gate=True, discovery_port=None):
                     last_audio = audio
 
                     now = time.monotonic()
-                    if now - last_draw >= 0.15:
+                    if monitor and now - last_draw >= 0.15:
                         elapsed = max(now - started, 0.001)
                         render(
                             "AudioLiam Sender",
@@ -102,13 +105,16 @@ def run(host, port, device=None, noise_gate=True, discovery_port=None):
                         last_draw = now
         finally:
             events.append(make_event("Connection closed"))
-            render(
-                "AudioLiam Sender",
-                [f"Receiver: {host}:{port}", "Connection closed."],
-                last_audio,
-                SAMPLE_RATE,
-                events,
-            )
+            if monitor:
+                render(
+                    "AudioLiam Sender",
+                    [f"Receiver: {host}:{port}", "Connection closed."],
+                    last_audio,
+                    SAMPLE_RATE,
+                    events,
+                )
+            else:
+                print(f"Connection closed: {host}:{port}")
 
 
 def main():
@@ -118,10 +124,11 @@ def main():
     parser.add_argument("--discovery-port", type=int, help="UDP discovery port (defaults to --port)")
     parser.add_argument("--device", help="sounddevice input device name or index")
     parser.add_argument("--no-noise-gate", action="store_true", help="disable the gentle background noise gate")
+    parser.add_argument("--no-monitor", action="store_true", help="disable the live terminal dashboard")
     args = parser.parse_args()
     try:
         run(args.host, args.port, args.device, noise_gate=not args.no_noise_gate,
-            discovery_port=args.discovery_port)
+            discovery_port=args.discovery_port, monitor=not args.no_monitor)
     except KeyboardInterrupt:
         print("\nStopped.")
     except (OSError, RuntimeError) as exc:

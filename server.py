@@ -116,11 +116,13 @@ class ServerStatus:
                     self.rate_kib, self.audio, self.refused, self.event, list(self.events))
 
 
-def serve_client(connection, address, sink_name, status):
+def serve_client(connection, address, sink_name, status, monitor=True):
     pacat = shutil.which("pacat")
     if pacat is None:
         status.end("pacat not found")
         connection.close()
+        if not monitor:
+            print("Stream stopped: pacat not found")
         return
     try:
         player = subprocess.Popen(
@@ -155,11 +157,15 @@ def serve_client(connection, address, sink_name, status):
             player.wait()
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         status.end(f"Stream stopped: {exc}")
+        if not monitor:
+            print(f"Stream stopped: {exc}")
     else:
         status.end(f"Disconnected: {address[0]}")
+        if not monitor:
+            print(f"Connection closed: {address[0]}")
 
 
-def run(host, port, discovery_port, sink_name, description):
+def run(host, port, discovery_port, sink_name, description, monitor=True):
     discovery_port = discovery_port or port
     status = ServerStatus()
     with VirtualMicrophone(sink_name, description):
@@ -189,6 +195,8 @@ def run(host, port, discovery_port, sink_name, description):
                             status.address = address
                     if already_active:
                         status.refuse(address)
+                        if not monitor:
+                            print(f"Connection refused from {address[0]}: already connected")
                         try:
                             connection.sendall(BUSY)
                         except OSError:
@@ -200,23 +208,29 @@ def run(host, port, discovery_port, sink_name, description):
                             hello = recv_exact(connection, len(HELLO))
                             if hello != HELLO:
                                 status.end("Rejected client with incompatible protocol")
+                                if not monitor:
+                                    print(f"Rejected incompatible client from {address[0]}")
                                 connection.close()
                             else:
                                 status.start(address)
+                                if not monitor:
+                                    print(f"Connection started from {address[0]}")
                                 connection.sendall(READY)
                                 connection.settimeout(None)
                                 worker = threading.Thread(
                                     target=serve_client,
-                                    args=(connection, address, sink_name, status),
+                                    args=(connection, address, sink_name, status, monitor),
                                     daemon=True,
                                 )
                                 worker.start()
                         except OSError as exc:
                             status.end(f"Connection failed: {exc}")
+                            if not monitor:
+                                print(f"Connection failed from {address[0]}: {exc}")
                             connection.close()
 
                 now = time.monotonic()
-                if now - last_draw >= 0.15:
+                if monitor and now - last_draw >= 0.15:
                     active, address, missing, rate, audio, refused, event, events = status.snapshot()
                     render(
                         "AudioLiam Receiver",
@@ -241,9 +255,11 @@ def main():
     parser.add_argument("--discovery-port", type=int, help="UDP discovery port (defaults to --port)")
     parser.add_argument("--sink-name", default=SINK_NAME)
     parser.add_argument("--sink-description", default=SINK_DESCRIPTION)
+    parser.add_argument("--no-monitor", action="store_true", help="disable the live terminal dashboard")
     args = parser.parse_args()
     try:
-        run(args.host, args.port, args.discovery_port, args.sink_name, args.sink_description)
+        run(args.host, args.port, args.discovery_port, args.sink_name, args.sink_description,
+            monitor=not args.no_monitor)
     except KeyboardInterrupt:
         print("\nStopped.")
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
